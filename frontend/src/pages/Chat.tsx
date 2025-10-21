@@ -1,0 +1,370 @@
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { io, Socket } from 'socket.io-client';
+import ChatList from '../components/ChatList';
+import ChatWindow from '../components/ChatWindow';
+import CreateChatModal from '../components/CreateChatModal';
+import AccountSettingsModal from '../components/AccountSettingsModal';
+
+interface Message {
+  id: number;
+  content: string;
+  userId: number;
+  chatId: number;
+  createdAt: string;
+  username: string;
+}
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
+interface Chat {
+  id: number;
+  name: string | null;
+  type: 'direct' | 'group';
+  createdAt: string;
+  createdBy: number;
+  participants: User[];
+}
+
+function Chat() {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [authState, setAuthState] = useState<{
+    user: User | null;
+    token: string | null;
+    isAuthenticated: boolean;
+  }>({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+  });
+  const [isConnected, setIsConnected] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [showCreateChat, setShowCreateChat] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const selectedChatIdRef = useRef<number | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check authentication
+    const token = localStorage.getItem('authToken');
+    const user = localStorage.getItem('authUser');
+
+    if (!token || !user) {
+      navigate('/signin');
+      return;
+    }
+
+    try {
+      const parsedUser = JSON.parse(user);
+      setAuthState({
+        user: parsedUser,
+        token,
+        isAuthenticated: true,
+      });
+    } catch (error) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      navigate('/signin');
+      return;
+    }
+  }, [navigate]);
+
+  // Setup socket and load data when authenticated
+  useEffect(() => {
+    if (!authState.isAuthenticated || !authState.user || !authState.token) return;
+
+    // Setup socket first
+    const newSocket = io('http://localhost:3000');
+    setSocket(newSocket);
+
+    // Load chats with socket instance
+    loadChats(authState.token, newSocket);
+
+    newSocket.on('connect', () => {
+      setIsConnected(true);
+      // Authenticate socket with user ID once connected
+      newSocket.emit('authenticate', authState.user!.id);
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    newSocket.on('newMessage', (message: Message) => {
+      console.log('Received message:', message.chatId, 'Selected chat ID:', selectedChatIdRef.current);
+
+      // If message is for the currently selected chat, show it immediately
+      if (selectedChatIdRef.current && message.chatId === selectedChatIdRef.current) {
+        console.log('Message for selected chat - adding to messages');
+        setMessages(prev => [...prev, message]);
+      }
+    });
+
+    newSocket.on('newChat', (newChat: any) => {
+      // Reload chats when a new chat is created
+      if (authState.token) {
+        loadChats(authState.token);
+      }
+    });
+
+    return () => {
+      newSocket.close();
+    };
+  }, [authState.isAuthenticated, authState.user, authState.token]);
+
+  // Update selected chat ID ref when selectedChat changes
+  useEffect(() => {
+    selectedChatIdRef.current = selectedChat?.id || null;
+  }, [selectedChat]);
+
+  // Handle socket connection after initial load
+  useEffect(() => {
+    if (socket && socket.connected && selectedChat) {
+      // Join the selected chat room if socket just connected
+      socket.emit('joinChat', selectedChat.id);
+    }
+  }, [socket?.connected, selectedChat]);
+
+  const loadChats = async (token: string, socketInstance?: Socket) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/chats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const chatsData = await response.json();
+
+        setChats(chatsData);
+
+        // Restore selected chat if it exists in localStorage
+        const savedChatId = localStorage.getItem('selectedChatId');
+        if (savedChatId) {
+          const savedChat = chatsData.find((chat: Chat) => chat.id.toString() === savedChatId);
+          if (savedChat) {
+            // Set selected chat synchronously to prevent notification issues
+            setSelectedChat(savedChat);
+
+            // Join chat room if socket instance is connected
+            if (socketInstance && socketInstance.connected) {
+              socketInstance.emit('joinChat', savedChat.id);
+            }
+
+            // Load messages for this chat
+            loadMessagesForChat(savedChat, token);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Load chats error:', error);
+    }
+  };
+
+  const loadMessagesForChat = async (chat: Chat, token: string) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/chats/${chat.id}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const chatMessages = await response.json();
+        setMessages(chatMessages);
+      }
+    } catch (error) {
+      console.error('Load messages error:', error);
+    }
+  };
+
+  const selectChat = async (chat: Chat) => {
+    setSelectedChat(chat);
+
+    setMessages([]);
+    setIsLoadingMessages(true);
+
+    // Save selected chat to localStorage
+    localStorage.setItem('selectedChatId', chat.id.toString());
+
+    // Join chat room if socket is connected
+    if (socket && socket.connected) {
+      // Leave previous chat if any
+      if (selectedChat) {
+        socket.emit('leaveChat', selectedChat.id);
+      }
+      // Join new chat
+      socket.emit('joinChat', chat.id);
+    }
+
+    // Load messages for this chat
+    if (authState.token) {
+      try {
+        const response = await fetch(`http://localhost:3000/api/chats/${chat.id}/messages`, {
+          headers: {
+            'Authorization': `Bearer ${authState.token}`,
+          },
+        });
+        if (response.ok) {
+          const chatMessages = await response.json();
+          setMessages(chatMessages);
+        }
+      } catch (error) {
+        console.error('Load messages error:', error);
+      }
+    }
+    setIsLoadingMessages(false);
+  };
+
+  const handleSendMessage = () => {
+    if (!currentMessage.trim() || !authState.user || !socket || !authState.token || !selectedChat) return;
+
+    socket.emit('sendMessage', {
+      content: currentMessage.trim(),
+      chatId: selectedChat.id,
+      userId: authState.user.id,
+      token: authState.token,
+    });
+
+    setCurrentMessage('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const createChat = async (formData: { name: string; participantUsernames: string; type: 'direct' | 'group' }) => {
+    if (!authState.token) return;
+
+    const usernames = formData.participantUsernames.split(',').map(u => u.trim()).filter(u => u);
+    if (usernames.length === 0) {
+      setAuthError('At least one participant is required');
+      return;
+    }
+
+    // For direct chats, only one username should be provided
+    if (formData.type === 'direct' && usernames.length !== 1) {
+      setAuthError('Direct messages require exactly one username');
+      return;
+    }
+
+    try {
+      // Get all users to find IDs by username
+      const usersResponse = await fetch('http://localhost:3000/api/users', {
+        headers: {
+          'Authorization': `Bearer ${authState.token}`,
+        },
+      });
+
+      if (!usersResponse.ok) {
+        setAuthError('Failed to load users');
+        return;
+      }
+
+      const allUsers = await usersResponse.json();
+
+      // Find user IDs for the provided usernames
+      const participantIds: number[] = [];
+      for (const username of usernames) {
+        const user = allUsers.find((u: User) => u.username === username);
+        if (!user) {
+          setAuthError(`User "${username}" not found`);
+          return;
+        }
+        participantIds.push(user.id);
+      }
+
+      const response = await fetch('http://localhost:3000/api/chats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authState.token}`,
+        },
+        body: JSON.stringify({
+          name: formData.name || null,
+          participantIds,
+          type: formData.type,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await loadChats(authState.token);
+        setShowCreateChat(false);
+      } else {
+        setAuthError(data.error || 'Failed to create chat');
+      }
+    } catch (error) {
+      setAuthError('Network error. Please try again.');
+      console.error('Create chat error:', error);
+    }
+  };
+
+  if (!authState.isAuthenticated) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div className="h-screen flex">
+      <ChatList
+        chats={chats}
+        selectedChat={selectedChat}
+        onSelectChat={selectChat}
+        onCreateChat={() => setShowCreateChat(true)}
+        onAccountSettings={() => setShowAccountSettings(true)}
+        user={authState.user}
+        isConnected={isConnected}
+      />
+
+      <ChatWindow
+        selectedChat={selectedChat}
+        messages={messages}
+        currentMessage={currentMessage}
+        onMessageChange={setCurrentMessage}
+        onSendMessage={handleSendMessage}
+        onKeyPress={handleKeyPress}
+        user={authState.user}
+      />
+
+      <CreateChatModal
+        isOpen={showCreateChat}
+        onClose={() => setShowCreateChat(false)}
+        onCreateChat={createChat}
+        error={authError}
+      />
+
+      <AccountSettingsModal
+        isOpen={showAccountSettings}
+        onClose={() => setShowAccountSettings(false)}
+        user={authState.user}
+        onLogout={() => {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('authUser');
+          localStorage.removeItem('selectedChatId');
+          setAuthState({ user: null, token: null, isAuthenticated: false });
+          navigate('/signin');
+        }}
+        onDeleteAccount={() => {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('authUser');
+          localStorage.removeItem('selectedChatId');
+          setAuthState({ user: null, token: null, isAuthenticated: false });
+          navigate('/');
+        }}
+      />
+    </div>
+  );
+}
+
+export default Chat;
