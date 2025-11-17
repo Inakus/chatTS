@@ -10,7 +10,7 @@ import chatRoutes, { setChatIO } from './routes/chat';
 import userRoutes from './routes/users';
 
 // Import middleware
-import { authenticateToken } from './middleware/auth';
+import { authenticateToken, authenticateApiKey, apiRateLimiter, authRateLimiter } from './middleware/auth';
 
 // Import socket handlers
 import { setupSocketHandlers } from './socket/socketHandlers';
@@ -30,8 +30,11 @@ app.use(express.json());
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
 
+// Apply rate limiting and API key authentication to all API routes
+app.use('/api', apiRateLimiter, authenticateApiKey);
+
 // Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRateLimiter, authRoutes);
 app.use('/api/chats', authenticateToken, chatRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
 

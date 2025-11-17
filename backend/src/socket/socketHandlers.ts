@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { db, users, chatParticipants, messages } from '../db';
 import { eq, and } from 'drizzle-orm';
+import { encryptMessage, decryptMessage } from '../utils/encryption';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
@@ -47,9 +48,9 @@ export const setupSocketHandlers = (io: any) => {
 
         const user = userResult[0];
 
-        // Save message to database
+        // Save message to database (encrypt content)
         const newMessage = await db.insert(messages).values({
-          content: data.content,
+          content: encryptMessage(data.content),
           chatId: data.chatId,
           userId: data.userId,
           createdAt: new Date(),
@@ -72,8 +73,14 @@ export const setupSocketHandlers = (io: any) => {
           .where(eq(messages.id, newMessage[0].id))
           .limit(1);
 
+        // Decrypt content for real-time emission
+        const decryptedMessage = {
+          ...messageWithMedia[0],
+          content: decryptMessage(messageWithMedia[0].content)
+        };
+
         // Emit to chat participants
-        io.to(`chat_${data.chatId}`).emit('newMessage', messageWithMedia[0]);
+        io.to(`chat_${data.chatId}`).emit('newMessage', decryptedMessage);
       } catch (error) {
         console.error('Send message error:', error);
       }

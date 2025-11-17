@@ -4,6 +4,7 @@ import path from 'path';
 import { db, users, chats, chatParticipants, messages } from '../db';
 import { eq, and, or } from 'drizzle-orm';
 import { AuthenticatedRequest } from '../types';
+import { encryptMessage, decryptMessage } from '../utils/encryption';
 
 // Store io instance for emitting events
 let io: any;
@@ -193,7 +194,13 @@ router.get('/:chatId/messages', async (req: AuthenticatedRequest, res) => {
       .where(eq(messages.chatId, parseInt(chatId)))
       .orderBy(messages.createdAt);
 
-    res.json(messagesList);
+    // Decrypt message content
+    const decryptedMessages = messagesList.map(message => ({
+      ...message,
+      content: decryptMessage(message.content)
+    }));
+
+    res.json(decryptedMessages);
   } catch (error) {
     console.error('Get messages error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -227,9 +234,9 @@ router.post('/:chatId/upload', upload.single('media'), async (req: Authenticated
     const mediaType = req.file.mimetype === 'image/gif' ? 'gif' : 'image';
     const mediaUrl = `/uploads/${req.file.filename}`;
 
-    // Create message with media
+    // Create message with media (encrypt content)
     const newMessage = await db.insert(messages).values({
-      content: content || '',
+      content: encryptMessage(content || ''),
       userId: req.user!.id,
       chatId: parseInt(chatId),
       createdAt: new Date(),
@@ -254,12 +261,18 @@ router.post('/:chatId/upload', upload.single('media'), async (req: Authenticated
       .where(eq(messages.id, newMessage[0].id))
       .limit(1);
 
+    // Decrypt content for real-time emission
+    const decryptedMessage = {
+      ...messageWithUser[0],
+      content: decryptMessage(messageWithUser[0].content)
+    };
+
     // Emit new message to all participants in the chat
     if (io) {
-      io.to(`chat_${chatId}`).emit('newMessage', messageWithUser[0]);
+      io.to(`chat_${chatId}`).emit('newMessage', decryptedMessage);
     }
 
-    res.status(201).json(messageWithUser[0]);
+    res.status(201).json(decryptedMessage);
   } catch (error) {
     console.error('Upload media error:', error);
     res.status(500).json({ error: 'Internal server error' });
