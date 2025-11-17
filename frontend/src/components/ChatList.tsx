@@ -23,9 +23,10 @@ interface ChatListProps {
   onAccountSettings: () => void;
   user: User | null;
   isConnected: boolean;
+  isMobile?: boolean;
 }
 
-function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSettings, user, isConnected }: ChatListProps) {
+function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSettings, user, isConnected, isMobile }: ChatListProps) {
   const getChatDisplayName = (chat: Chat) => {
     if (chat.name) return chat.name;
     if (chat.type === 'direct') {
@@ -36,25 +37,25 @@ function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSe
   };
 
   return (
-    <div className="w-80 bg-gray-100 dark:bg-gray-800 border-r border-gray-300 dark:border-gray-700 flex flex-col">
+    <div className={`${isMobile ? 'w-full' : 'w-96'} bg-gray-100 dark:bg-gray-800 border-r border-gray-300 dark:border-gray-700 flex flex-col h-full`}>
       <div className="p-4 border-b border-gray-300 dark:border-gray-700">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Chats</h2>
           <div className="flex items-center space-x-2">
+            <div className={`text-xs ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
+              {isConnected ? '●' : '●'}
+            </div>
             <ThemeToggle />
-            <button
-              onClick={onCreateChat}
-              className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
-            >
-              New Chat
-            </button>
           </div>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-gray-600 dark:text-gray-300">Welcome, {user?.username}</span>
-          <div className={`text-xs ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
-            {isConnected ? '●' : '●'}
-          </div>
+          <button
+            onClick={onCreateChat}
+            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
+          >
+            New Chat
+          </button>
         </div>
       </div>
 

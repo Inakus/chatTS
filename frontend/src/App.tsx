@@ -131,6 +131,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: JSON.stringify(body),
       });
@@ -207,6 +208,7 @@ function App() {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
 
@@ -235,6 +237,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: JSON.stringify({
           currentPassword: authForm.currentPassword,
@@ -278,6 +281,7 @@ function App() {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: formData,
       });
@@ -299,6 +303,7 @@ function App() {
       const response = await fetch('http://localhost:3000/api/chats', {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
       if (response.ok) {
@@ -329,6 +334,7 @@ function App() {
         const response = await fetch(`http://localhost:3000/api/messages/${chat.id}`, {
           headers: {
             'Authorization': `Bearer ${authState.token}`,
+            'x-api-key': import.meta.env.VITE_API_KEY,
           },
         });
         if (response.ok) {
@@ -361,6 +367,7 @@ function App() {
       const usersResponse = await fetch('http://localhost:3000/api/users', {
         headers: {
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
 
@@ -387,6 +394,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: JSON.stringify({
           name: createChatForm.name || null,

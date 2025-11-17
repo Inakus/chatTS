@@ -51,6 +51,7 @@ function Chat() {
   const [authError, setAuthError] = useState('');
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const selectedChatIdRef = useRef<number | null>(null);
   const navigate = useNavigate();
@@ -148,6 +149,7 @@ function Chat() {
       const response = await fetch('http://localhost:3000/api/chats', {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
       if (response.ok) {
@@ -183,6 +185,7 @@ function Chat() {
       const response = await fetch(`http://localhost:3000/api/chats/${chat.id}/messages`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
       if (response.ok) {
@@ -196,6 +199,7 @@ function Chat() {
 
   const selectChat = async (chat: Chat) => {
     setSelectedChat(chat);
+    setIsSidebarOpen(false); // Close sidebar on mobile when chat is selected
 
     setMessages([]);
 
@@ -218,6 +222,7 @@ function Chat() {
         const response = await fetch(`http://localhost:3000/api/chats/${chat.id}/messages`, {
           headers: {
             'Authorization': `Bearer ${authState.token}`,
+            'x-api-key': import.meta.env.VITE_API_KEY,
           },
         });
         if (response.ok) {
@@ -264,6 +269,7 @@ function Chat() {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: formData,
       });
@@ -300,6 +306,7 @@ function Chat() {
       const usersResponse = await fetch('http://localhost:3000/api/users', {
         headers: {
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
       });
 
@@ -326,6 +333,7 @@ function Chat() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authState.token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
         },
         body: JSON.stringify({
           name: formData.name || null,
@@ -353,17 +361,50 @@ function Chat() {
   }
 
   return (
-    <div className="h-screen flex">
-      <ChatList
-        chats={chats}
-        selectedChat={selectedChat}
-        onSelectChat={selectChat}
-        onCreateChat={() => setShowCreateChat(true)}
-        onAccountSettings={() => setShowAccountSettings(true)}
-        user={authState.user}
-        isConnected={isConnected}
-      />
+    <div className="h-screen flex relative">
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-gray-800 dark:bg-gray-700 text-white rounded-lg shadow-lg"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
 
+      {/* Mobile overlay */}
+      {isSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Chat List - Desktop: always visible, Mobile: slide in/out */}
+      <div className={`
+        fixed md:relative inset-y-0 left-0 z-50 md:z-auto
+        transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+        transition-transform duration-300 ease-in-out
+      `}>
+        <ChatList
+          chats={chats}
+          selectedChat={selectedChat}
+          onSelectChat={selectChat}
+          onCreateChat={() => {
+            setShowCreateChat(true);
+            setIsSidebarOpen(false); // Close sidebar on mobile when opening modal
+          }}
+          onAccountSettings={() => {
+            setShowAccountSettings(true);
+            setIsSidebarOpen(false); // Close sidebar on mobile when opening modal
+          }}
+          user={authState.user}
+          isConnected={isConnected}
+          isMobile={true}
+        />
+      </div>
+
+      {/* Chat Window */}
       <ChatWindow
         selectedChat={selectedChat}
         messages={messages}

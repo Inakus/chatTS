@@ -68,8 +68,8 @@ function ChatWindow({
 
   if (!selectedChat) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center max-w-2xl mx-auto px-4">
           <h3 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">Select a chat</h3>
           <p className="text-gray-500 dark:text-gray-500">Choose a chat from the sidebar to start messaging</p>
         </div>
@@ -78,15 +78,17 @@ function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="p-4 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <div className="h-screen w-full bg-gray-50 dark:bg-gray-900 flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{getChatDisplayName(selectedChat)}</h3>
         <div className="text-sm text-gray-600 dark:text-gray-400">
           {selectedChat.participants.length} participants
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -125,7 +127,8 @@ function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+      {/* Input Area */}
+      <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
         <div className="flex gap-2">
           <input
             type="file"
