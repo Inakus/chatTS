@@ -1,4 +1,6 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
 import { db, users, chats, chatParticipants, messages } from '../db';
 import { eq, and, or } from 'drizzle-orm';
 import { AuthenticatedRequest } from '../types';
@@ -11,6 +13,31 @@ export const setChatIO = (socketIO: any) => {
 };
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') && (file.mimetype === 'image/gif' || file.mimetype.startsWith('image/'))) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
 
 // Chat endpoints
 router.post('/', async (req: AuthenticatedRequest, res) => {
@@ -158,6 +185,8 @@ router.get('/:chatId/messages', async (req: AuthenticatedRequest, res) => {
         chatId: messages.chatId,
         createdAt: messages.createdAt,
         username: users.username,
+        mediaUrl: messages.mediaUrl,
+        mediaType: messages.mediaType,
       })
       .from(messages)
       .innerJoin(users, eq(messages.userId, users.id))
@@ -167,6 +196,72 @@ router.get('/:chatId/messages', async (req: AuthenticatedRequest, res) => {
     res.json(messagesList);
   } catch (error) {
     console.error('Get messages error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Upload media endpoint
+router.post('/:chatId/upload', upload.single('media'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { chatId } = req.params;
+    const { content } = req.body;
+
+    // Check if user is participant in the chat
+    const isParticipant = await db
+      .select()
+      .from(chatParticipants)
+      .where(and(
+        eq(chatParticipants.chatId, parseInt(chatId)),
+        eq(chatParticipants.userId, req.user!.id)
+      ))
+      .limit(1);
+
+    if (isParticipant.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const mediaType = req.file.mimetype === 'image/gif' ? 'gif' : 'image';
+    const mediaUrl = `/uploads/${req.file.filename}`;
+
+    // Create message with media
+    const newMessage = await db.insert(messages).values({
+      content: content || '',
+      userId: req.user!.id,
+      chatId: parseInt(chatId),
+      createdAt: new Date(),
+      mediaUrl,
+      mediaType,
+    }).returning();
+
+    // Get the message with username
+    const messageWithUser = await db
+      .select({
+        id: messages.id,
+        content: messages.content,
+        userId: messages.userId,
+        chatId: messages.chatId,
+        createdAt: messages.createdAt,
+        username: users.username,
+        mediaUrl: messages.mediaUrl,
+        mediaType: messages.mediaType,
+      })
+      .from(messages)
+      .innerJoin(users, eq(messages.userId, users.id))
+      .where(eq(messages.id, newMessage[0].id))
+      .limit(1);
+
+    // Emit new message to all participants in the chat
+    if (io) {
+      io.to(`chat_${chatId}`).emit('newMessage', messageWithUser[0]);
+    }
+
+    res.status(201).json(messageWithUser[0]);
+  } catch (error) {
+    console.error('Upload media error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

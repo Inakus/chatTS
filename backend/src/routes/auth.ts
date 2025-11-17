@@ -106,7 +106,7 @@ router.delete('/account', authenticateToken, async (req: AuthenticatedRequest, r
     // Delete chat participations
     await db.delete(chatParticipants).where(eq(chatParticipants.userId, userId));
 
-    // Delete chats created by this user (optional - could transfer ownership)
+    // Delete chats created by this user 
     await db.update(chats).set({ createdBy: null }).where(eq(chats.createdBy, userId));
 
     // Finally, delete the user

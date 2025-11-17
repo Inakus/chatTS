@@ -5,7 +5,7 @@ export default defineConfig({
   out: './drizzle',
   driver: 'libsql',
   dbCredentials: {
-    url: './chat.db',
+    url: 'file:./chat.db',
   },
   verbose: true,
   strict: true,

@@ -55,15 +55,25 @@ export const setupSocketHandlers = (io: any) => {
           createdAt: new Date(),
         }).returning();
 
+        // Get the message with all fields including media
+        const messageWithMedia = await db
+          .select({
+            id: messages.id,
+            content: messages.content,
+            userId: messages.userId,
+            chatId: messages.chatId,
+            createdAt: messages.createdAt,
+            username: users.username,
+            mediaUrl: messages.mediaUrl,
+            mediaType: messages.mediaType,
+          })
+          .from(messages)
+          .innerJoin(users, eq(messages.userId, users.id))
+          .where(eq(messages.id, newMessage[0].id))
+          .limit(1);
+
         // Emit to chat participants
-        io.to(`chat_${data.chatId}`).emit('newMessage', {
-          id: newMessage[0].id,
-          content: newMessage[0].content,
-          chatId: newMessage[0].chatId,
-          userId: newMessage[0].userId,
-          createdAt: newMessage[0].createdAt,
-          username: user.username
-        });
+        io.to(`chat_${data.chatId}`).emit('newMessage', messageWithMedia[0]);
       } catch (error) {
         console.error('Send message error:', error);
       }

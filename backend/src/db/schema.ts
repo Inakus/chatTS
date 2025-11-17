@@ -29,4 +29,6 @@ export const messages = sqliteTable('messages', {
   userId: integer('user_id').references(() => users.id).notNull(),
   chatId: integer('chat_id').references(() => chats.id).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  mediaUrl: text('media_url'),
+  mediaType: text('media_type'), // 'image' or 'gif'
 });

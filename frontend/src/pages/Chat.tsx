@@ -13,6 +13,8 @@ interface Message {
   chatId: number;
   createdAt: string;
   username: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'gif';
 }
 
 interface User {
@@ -49,7 +51,7 @@ function Chat() {
   const [authError, setAuthError] = useState('');
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
   const selectedChatIdRef = useRef<number | null>(null);
   const navigate = useNavigate();
 
@@ -105,11 +107,18 @@ function Chat() {
       // If message is for the currently selected chat, show it immediately
       if (selectedChatIdRef.current && message.chatId === selectedChatIdRef.current) {
         console.log('Message for selected chat - adding to messages');
-        setMessages(prev => [...prev, message]);
+        // Check if message already exists to prevent duplicates
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === message.id);
+          if (!exists) {
+            return [...prev, message];
+          }
+          return prev;
+        });
       }
     });
 
-    newSocket.on('newChat', (newChat: any) => {
+    newSocket.on('newChat', () => {
       // Reload chats when a new chat is created
       if (authState.token) {
         loadChats(authState.token);
@@ -189,7 +198,6 @@ function Chat() {
     setSelectedChat(chat);
 
     setMessages([]);
-    setIsLoadingMessages(true);
 
     // Save selected chat to localStorage
     localStorage.setItem('selectedChatId', chat.id.toString());
@@ -220,7 +228,6 @@ function Chat() {
         console.error('Load messages error:', error);
       }
     }
-    setIsLoadingMessages(false);
   };
 
   const handleSendMessage = () => {
@@ -240,6 +247,36 @@ function Chat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleUploadMedia = async (file: File, content?: string) => {
+    if (!authState.user || !authState.token || !selectedChat) return;
+
+    const formData = new FormData();
+    formData.append('media', file);
+    if (content) {
+      formData.append('content', content);
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/chats/${selectedChat.id}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authState.token}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const newMessage = await response.json();
+        setMessages(prev => [...prev, newMessage]);
+        setCurrentMessage(''); // Clear the message input
+      } else {
+        console.error('Failed to upload media');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
     }
   };
 
@@ -334,6 +371,7 @@ function Chat() {
         onMessageChange={setCurrentMessage}
         onSendMessage={handleSendMessage}
         onKeyPress={handleKeyPress}
+        onUploadMedia={handleUploadMedia}
         user={authState.user}
       />
 

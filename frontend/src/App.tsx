@@ -12,6 +12,8 @@ interface Message {
   chatId: number;
   createdAt: string;
   username: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'gif';
 }
 
 interface User {
@@ -262,6 +264,36 @@ function App() {
     }
   };
 
+  const handleUploadMedia = async (file: File, content?: string) => {
+    if (!authState.user || !authState.token || !selectedChat) return;
+
+    const formData = new FormData();
+    formData.append('media', file);
+    if (content) {
+      formData.append('content', content);
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/chats/${selectedChat.id}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authState.token}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const newMessage = await response.json();
+        setMessages(prev => [...prev, newMessage]);
+        setCurrentMessage(''); // Clear the message input
+      } else {
+        console.error('Failed to upload media');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+  };
+
   const loadChats = async (token: string) => {
     try {
       const response = await fetch('http://localhost:3000/api/chats', {
@@ -378,14 +410,7 @@ function App() {
     }
   };
 
-  const getChatDisplayName = (chat: Chat) => {
-    if (chat.name) return chat.name;
-    if (chat.type === 'direct') {
-      const otherParticipant = chat.participants.find(p => p.id !== authState.user?.id);
-      return otherParticipant ? otherParticipant.username : 'Direct Chat';
-    }
-    return 'Group Chat';
-  };
+
 
   if (!authState.isAuthenticated) {
     return (
@@ -406,6 +431,7 @@ function App() {
         selectedChat={selectedChat}
         onSelectChat={selectChat}
         onCreateChat={() => setShowCreateChat(true)}
+        onAccountSettings={() => setShowAccountSettings(true)}
         user={authState.user}
         isConnected={isConnected}
       />
@@ -417,6 +443,7 @@ function App() {
         onMessageChange={setCurrentMessage}
         onSendMessage={handleSendMessage}
         onKeyPress={handleKeyPress}
+        onUploadMedia={handleUploadMedia}
         user={authState.user}
       />
 
