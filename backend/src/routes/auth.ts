@@ -2,12 +2,56 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { db, users, messages, chatParticipants, chats } from '../db';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { AuthenticatedRequest } from '../types';
 import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+
+// Helper function to ensure global chat exists and user is added to it
+async function ensureGlobalChat(userId: number) {
+  try {
+    // Check if global chat exists
+    let globalChat = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.type, 'global'))
+      .limit(1);
+
+    if (globalChat.length === 0) {
+      // Create global chat
+      globalChat = await db.insert(chats).values({
+        name: 'Global Chat',
+        type: 'global',
+        createdAt: new Date(),
+        createdBy: null, // System created
+      }).returning();
+    }
+
+    // Check if user is already in global chat
+    const existingParticipation = await db
+      .select()
+      .from(chatParticipants)
+      .where(and(
+        eq(chatParticipants.chatId, globalChat[0].id),
+        eq(chatParticipants.userId, userId)
+      ))
+      .limit(1);
+
+    if (existingParticipation.length === 0) {
+      // Add user to global chat
+      await db.insert(chatParticipants).values({
+        chatId: globalChat[0].id,
+        userId: userId,
+        joinedAt: new Date(),
+      });
+    }
+  } catch (error) {
+    console.error('Error ensuring global chat:', error);
+    // Don't throw error - registration should still succeed
+  }
+}
 
 // Auth endpoints
 router.post('/register', async (req, res) => {
@@ -40,15 +84,18 @@ router.post('/register', async (req, res) => {
       createdAt: new Date(),
     }).returning();
 
+    // Create or join global chat
+    await ensureGlobalChat(newUser[0].id);
+
     // Generate JWT token
     const token = jwt.sign(
-      { id: newUser[0].id, username: newUser[0].username, email: newUser[0].email },
+      { id: newUser[0].id, username: newUser[0].username, email: newUser[0].email, role: newUser[0].role },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.status(201).json({
-      user: { id: newUser[0].id, username: newUser[0].username, email: newUser[0].email },
+      user: { id: newUser[0].id, username: newUser[0].username, email: newUser[0].email, role: newUser[0].role },
       token
     });
   } catch (error) {
@@ -79,15 +126,18 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Ensure user is in global chat (for existing users)
+    await ensureGlobalChat(user.id);
+
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, username: user.username, email: user.email },
+      { id: user.id, username: user.username, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.json({
-      user: { id: user.id, username: user.username, email: user.email },
+      user: { id: user.id, username: user.username, email: user.email, role: user.role },
       token
     });
   } catch (error) {

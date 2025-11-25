@@ -1,4 +1,5 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
+import EmojiPicker from './EmojiPicker';
 
 interface User {
   id: number;
@@ -9,7 +10,7 @@ interface User {
 interface Chat {
   id: number;
   name: string | null;
-  type: 'direct' | 'group';
+  type: 'direct' | 'group' | 'global';
   createdAt: string;
   createdBy: number;
   participants: User[];
@@ -24,11 +25,14 @@ interface Message {
   username: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'gif';
+  deleted?: boolean;
+  deletedAt?: string;
 }
 
 interface ChatWindowProps {
   selectedChat: Chat | null;
   messages: Message[];
+  onMessagesChange: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
   currentMessage: string;
   onMessageChange: (message: string) => void;
   onSendMessage: () => void;
@@ -40,6 +44,7 @@ interface ChatWindowProps {
 function ChatWindow({
   selectedChat,
   messages,
+  onMessagesChange,
   currentMessage,
   onMessageChange,
   onSendMessage,
@@ -48,6 +53,12 @@ function ChatWindow({
   user
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    messageId: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -66,9 +77,90 @@ function ChatWindow({
     return 'Group Chat';
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    onMessageChange(currentMessage + emoji);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, message: Message) => {
+    e.preventDefault();
+    // Only show context menu for messages sent by the current user and not already deleted
+    if (message.userId === user?.id && !message.deleted) {
+      setContextMenu({
+        messageId: message.id,
+        x: e.clientX,
+        y: e.clientY,
+      });
+    }
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!contextMenu || !selectedChat) return;
+
+    console.log('Deleting message:', contextMenu.messageId);
+
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
+      const response = await fetch(`http://localhost:3000/api/chats/${selectedChat.id}/messages/${contextMenu.messageId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-api-key': import.meta.env.VITE_API_KEY,
+        },
+      });
+
+      console.log('Delete response status:', response.status);
+
+      if (response.ok) {
+        console.log('Message deleted successfully');
+
+        // Update the message locally to show as deleted immediately
+        const deletedMessageData = {
+          id: contextMenu.messageId,
+          deleted: true,
+          deletedAt: new Date().toISOString(),
+          // Keep other fields as they were
+          content: '',
+          userId: user?.id || 0,
+          chatId: selectedChat?.id || 0,
+          createdAt: '',
+          username: user?.username || '',
+        };
+
+        // Update the message in state immediately
+        onMessagesChange(prev => prev.map(m =>
+          m.id === contextMenu.messageId
+            ? { ...m, deleted: true, deletedAt: new Date().toISOString() }
+            : m
+        ));
+
+        setContextMenu(null);
+      } else {
+        console.error('Failed to delete message');
+      }
+    } catch (error) {
+      console.error('Delete message error:', error);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+    };
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [contextMenu]);
+
   if (!selectedChat) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center max-w-2xl mx-auto px-4">
           <h3 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">Select a chat</h3>
           <p className="text-gray-500 dark:text-gray-500">Choose a chat from the sidebar to start messaging</p>
@@ -78,7 +170,7 @@ function ChatWindow({
   }
 
   return (
-    <div className="h-screen w-full bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className="flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{getChatDisplayName(selectedChat)}</h3>
@@ -89,14 +181,15 @@ function ChatWindow({
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
-        {messages.map((message) => (
+        {messages.filter(message => !message.deleted).map((message) => (
           <div
             key={message.id}
             className={`mb-3 p-3 rounded-lg max-w-md ${
               message.userId === user?.id
                 ? 'bg-blue-500 text-white ml-auto'
                 : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
-            }`}
+            } ${message.userId === user?.id ? 'cursor-pointer' : ''}`}
+            onContextMenu={(e) => handleContextMenu(e, message)}
           >
             {message.userId !== user?.id && (
               <div className="font-medium text-sm mb-1 text-gray-900 dark:text-white">{message.username}</div>
@@ -125,10 +218,25 @@ function ChatWindow({
           </div>
         )}
         <div ref={messagesEndRef} />
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <div
+            className="fixed bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-2 z-50"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={handleDeleteMessage}
+              className="w-full px-4 py-2 text-left text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              Delete Message
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
+      <div className="p-4 border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 relative">
         <div className="flex gap-2">
           <input
             type="file"
@@ -149,6 +257,16 @@ function ChatWindow({
           >
             📎
           </label>
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`px-3 py-2 text-base border border-gray-300 dark:border-gray-600 rounded transition-colors ${
+              showEmojiPicker
+                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            😀
+          </button>
           <textarea
             placeholder="Type your message..."
             value={currentMessage}
@@ -176,6 +294,13 @@ function ChatWindow({
             Send
           </button>
         </div>
+
+        {/* Emoji Picker */}
+        <EmojiPicker
+          isOpen={showEmojiPicker}
+          onClose={() => setShowEmojiPicker(false)}
+          onEmojiSelect={handleEmojiSelect}
+        />
       </div>
     </div>
   );

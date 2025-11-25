@@ -5,6 +5,7 @@ import ChatList from '../components/ChatList';
 import ChatWindow from '../components/ChatWindow';
 import CreateChatModal from '../components/CreateChatModal';
 import AccountSettingsModal from '../components/AccountSettingsModal';
+import AdminPanel from '../components/AdminPanel';
 
 interface Message {
   id: number;
@@ -15,18 +16,21 @@ interface Message {
   username: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'gif';
+  deleted?: boolean;
+  deletedAt?: string;
 }
 
 interface User {
   id: number;
   username: string;
   email: string;
+  role?: string;
 }
 
 interface Chat {
   id: number;
   name: string | null;
-  type: 'direct' | 'group';
+  type: 'direct' | 'group' | 'global';
   createdAt: string;
   createdBy: number;
   participants: User[];
@@ -51,6 +55,7 @@ function Chat() {
   const [authError, setAuthError] = useState('');
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const selectedChatIdRef = useRef<number | null>(null);
@@ -116,6 +121,14 @@ function Chat() {
           }
           return prev;
         });
+      }
+    });
+
+    newSocket.on('messageUpdated', (updatedMessage: Message) => {
+      console.log('Received messageUpdated:', updatedMessage);
+      if (selectedChatIdRef.current && updatedMessage.chatId === selectedChatIdRef.current) {
+        console.log('Updating message in state:', updatedMessage.id);
+        setMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m));
       }
     });
 
@@ -275,8 +288,7 @@ function Chat() {
       });
 
       if (response.ok) {
-        const newMessage = await response.json();
-        setMessages(prev => [...prev, newMessage]);
+        // Message will be added via socket event, no need to add locally
         setCurrentMessage(''); // Clear the message input
       } else {
         console.error('Failed to upload media');
@@ -398,6 +410,10 @@ function Chat() {
             setShowAccountSettings(true);
             setIsSidebarOpen(false); // Close sidebar on mobile when opening modal
           }}
+          onAdminPanel={authState.user?.role === 'admin' ? () => {
+            setShowAdminPanel(true);
+            setIsSidebarOpen(false); // Close sidebar on mobile when opening modal
+          } : undefined}
           user={authState.user}
           isConnected={isConnected}
           isMobile={true}
@@ -408,6 +424,7 @@ function Chat() {
       <ChatWindow
         selectedChat={selectedChat}
         messages={messages}
+        onMessagesChange={setMessages}
         currentMessage={currentMessage}
         onMessageChange={setCurrentMessage}
         onSendMessage={handleSendMessage}
@@ -441,6 +458,11 @@ function Chat() {
           setAuthState({ user: null, token: null, isAuthenticated: false });
           navigate('/');
         }}
+      />
+
+      <AdminPanel
+        isOpen={showAdminPanel}
+        onClose={() => setShowAdminPanel(false)}
       />
     </div>
   );

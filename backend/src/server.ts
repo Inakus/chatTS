@@ -8,6 +8,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth';
 import chatRoutes, { setChatIO } from './routes/chat';
 import userRoutes from './routes/users';
+import adminRoutes, { setAdminIO } from './routes/admin';
 
 // Import middleware
 import { authenticateToken, authenticateApiKey, apiRateLimiter, authRateLimiter } from './middleware/auth';
@@ -37,10 +38,12 @@ app.use('/api', apiRateLimiter, authenticateApiKey);
 app.use('/api/auth', authRateLimiter, authRoutes);
 app.use('/api/chats', authenticateToken, chatRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
+app.use('/api/admin', authenticateToken, adminRoutes);
 
 // Setup Socket.IO
 setupSocketHandlers(io);
 setChatIO(io);
+setAdminIO(io);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

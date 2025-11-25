@@ -51,3 +51,10 @@ export const authRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const requireAdmin = (req: AuthenticatedRequest, res: any, next: any) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};

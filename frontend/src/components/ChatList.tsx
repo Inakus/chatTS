@@ -9,7 +9,7 @@ interface User {
 interface Chat {
   id: number;
   name: string | null;
-  type: 'direct' | 'group';
+  type: 'direct' | 'group' | 'global';
   createdAt: string;
   createdBy: number;
   participants: User[];
@@ -21,12 +21,13 @@ interface ChatListProps {
   onSelectChat: (chat: Chat) => void;
   onCreateChat: () => void;
   onAccountSettings: () => void;
+  onAdminPanel?: () => void;
   user: User | null;
   isConnected: boolean;
   isMobile?: boolean;
 }
 
-function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSettings, user, isConnected, isMobile }: ChatListProps) {
+function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSettings, onAdminPanel, user, isConnected, isMobile }: ChatListProps) {
   const getChatDisplayName = (chat: Chat) => {
     if (chat.name) return chat.name;
     if (chat.type === 'direct') {
@@ -60,18 +61,36 @@ function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSe
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {chats.map((chat) => (
+        {chats
+          .sort((a, b) => {
+            // Global chat always first
+            if (a.type === 'global') return -1;
+            if (b.type === 'global') return 1;
+            return 0;
+          })
+          .map((chat) => (
           <div
             key={chat.id}
             onClick={() => onSelectChat(chat)}
-            className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors relative ${selectedChat?.id === chat.id
+            className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors relative ${
+              selectedChat?.id === chat.id
                 ? 'bg-blue-50 dark:bg-blue-900 border-l-4 border-l-blue-500'
+                : chat.type === 'global'
+                ? 'bg-green-50 dark:bg-green-900 border-l-4 border-l-green-500'
                 : ''
-              }`}
+            }`}
           >
-            <div className="font-medium text-gray-900 dark:text-white">{getChatDisplayName(chat)}</div>
+            <div className={`font-medium ${chat.type === 'global' ? 'text-green-700 dark:text-green-300' : 'text-gray-900 dark:text-white'}`}>
+              {getChatDisplayName(chat)}
+              {chat.type === 'global' && <span className="ml-2 text-xs bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-1 rounded-full">Global</span>}
+            </div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {chat.type === 'group' ? `${chat.participants.length} members` : 'Direct message'}
+              {chat.type === 'global'
+                ? `${chat.participants.length} online users`
+                : chat.type === 'group'
+                ? `${chat.participants.length} members`
+                : 'Direct message'
+              }
             </div>
           </div>
         ))}
@@ -82,7 +101,15 @@ function ChatList({ chats, selectedChat, onSelectChat, onCreateChat, onAccountSe
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-300 dark:border-gray-700">
+      <div className="p-4 border-t border-gray-300 dark:border-gray-700 space-y-2">
+        {onAdminPanel && (
+          <button
+            onClick={onAdminPanel}
+            className="w-full px-3 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+          >
+            Admin Panel
+          </button>
+        )}
         <button
           onClick={onAccountSettings}
           className="w-full px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"

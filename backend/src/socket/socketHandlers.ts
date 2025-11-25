@@ -67,6 +67,8 @@ export const setupSocketHandlers = (io: any) => {
             username: users.username,
             mediaUrl: messages.mediaUrl,
             mediaType: messages.mediaType,
+            deleted: messages.deleted,
+            deletedAt: messages.deletedAt,
           })
           .from(messages)
           .innerJoin(users, eq(messages.userId, users.id))
@@ -85,6 +87,8 @@ export const setupSocketHandlers = (io: any) => {
         console.error('Send message error:', error);
       }
     });
+
+
 
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);

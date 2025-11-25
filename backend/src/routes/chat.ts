@@ -188,6 +188,8 @@ router.get('/:chatId/messages', async (req: AuthenticatedRequest, res) => {
         username: users.username,
         mediaUrl: messages.mediaUrl,
         mediaType: messages.mediaType,
+        deleted: messages.deleted,
+        deletedAt: messages.deletedAt,
       })
       .from(messages)
       .innerJoin(users, eq(messages.userId, users.id))
@@ -255,6 +257,8 @@ router.post('/:chatId/upload', upload.single('media'), async (req: Authenticated
         username: users.username,
         mediaUrl: messages.mediaUrl,
         mediaType: messages.mediaType,
+        deleted: messages.deleted,
+        deletedAt: messages.deletedAt,
       })
       .from(messages)
       .innerJoin(users, eq(messages.userId, users.id))
@@ -275,6 +279,93 @@ router.post('/:chatId/upload', upload.single('media'), async (req: Authenticated
     res.status(201).json(decryptedMessage);
   } catch (error) {
     console.error('Upload media error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Soft delete message (for message sender only)
+router.delete('/:chatId/messages/:messageId', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { chatId, messageId } = req.params;
+
+    // Check if user is participant in the chat
+    const isParticipant = await db
+      .select()
+      .from(chatParticipants)
+      .where(and(
+        eq(chatParticipants.chatId, parseInt(chatId)),
+        eq(chatParticipants.userId, req.user!.id)
+      ))
+      .limit(1);
+
+    if (isParticipant.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check if the message belongs to the user and is not already deleted
+    const message = await db
+      .select()
+      .from(messages)
+      .where(and(
+        eq(messages.id, parseInt(messageId)),
+        eq(messages.userId, req.user!.id),
+        eq(messages.deleted, false)
+      ))
+      .limit(1);
+
+    if (message.length === 0) {
+      return res.status(404).json({ error: 'Message not found or access denied' });
+    }
+
+    // Soft delete the message
+    const deletedMessage = await db
+      .update(messages)
+      .set({
+        deleted: true,
+        deletedAt: new Date()
+      })
+      .where(eq(messages.id, parseInt(messageId)))
+      .returning();
+
+    // Emit message update to all chat participants
+    if (io) {
+      // Get the updated message with deleted status
+      const updatedMessage = await db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          userId: messages.userId,
+          chatId: messages.chatId,
+          createdAt: messages.createdAt,
+          deleted: messages.deleted,
+          deletedAt: messages.deletedAt,
+          username: users.username,
+          mediaUrl: messages.mediaUrl,
+          mediaType: messages.mediaType,
+        })
+        .from(messages)
+        .innerJoin(users, eq(messages.userId, users.id))
+        .where(eq(messages.id, parseInt(messageId)))
+        .limit(1);
+
+      if (updatedMessage.length > 0) {
+        // Decrypt content for the updated message
+        const decryptedMessage = {
+          ...updatedMessage[0],
+          content: decryptMessage(updatedMessage[0].content)
+        };
+
+        console.log('Emitting messageUpdated globally:', decryptedMessage);
+        io.emit('messageUpdated', decryptedMessage);
+      }
+    }
+
+    res.json({
+      message: 'Message deleted successfully',
+      deletedMessage: deletedMessage[0]
+    });
+  } catch (error) {
+    console.error('Delete message error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

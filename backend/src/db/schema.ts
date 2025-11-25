@@ -5,6 +5,8 @@ export const users = sqliteTable('users', {
   username: text('username').notNull().unique(),
   email: text('email').notNull().unique(),
   password: text('password').notNull(),
+  role: text('role').default('user'), // 'user' or 'admin'
+  isBanned: integer('is_banned', { mode: 'boolean' }).default(false),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
@@ -31,4 +33,6 @@ export const messages = sqliteTable('messages', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   mediaUrl: text('media_url'),
   mediaType: text('media_type'), // 'image' or 'gif'
+  deleted: integer('deleted', { mode: 'boolean' }).default(false),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 });
