@@ -3,9 +3,9 @@ import ThemeToggle from './ThemeToggle';
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
+      <header className="container mx-auto px-4 py-6 flex-1">
         <nav className="flex justify-between items-center">
           <div className="text-2xl font-bold text-gray-800 dark:text-white">ChatApp</div>
           <div className="flex items-center space-x-4">
@@ -27,7 +27,7 @@ function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <main className="container mx-auto px-4 py-16">
+      <main className="container mx-auto px-4 py-16 flex-3">
         <div className="text-center max-w-4xl mx-auto">
           <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">
             Connect Instantly with <span className="text-blue-600 dark:text-blue-400">ChatApp</span>
@@ -111,7 +111,7 @@ function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 dark:bg-gray-900 text-white py-8 mt-16">
+      <footer className="bg-gray-800 flex-1 dark:bg-gray-900 text-white py-8 mt-16">
         <div className="container mx-auto px-4 text-center">
           <p className="text-gray-400">
             © 2025 ChatApp. Built with React, TypeScript, and Tailwind CSS.
